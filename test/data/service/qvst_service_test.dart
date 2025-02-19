@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart' as http_testing;
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:retrofit/retrofit.dart';
@@ -12,12 +13,14 @@ import 'package:xpeapp_admin/data/entities/qvst/qvst_answer_repo_entity.dart';
 import 'package:xpeapp_admin/data/entities/qvst/qvst_question_entity.dart';
 import 'package:xpeapp_admin/data/entities/qvst/theme/qvst_theme_entity.dart';
 import 'package:xpeapp_admin/data/entities/qvst/stats/qvst_stats_entity.dart';
+import 'package:http/http.dart' as http;
 import 'package:xpeapp_admin/data/service/qvst_service.dart';
 
 import 'qvst_service_test.mocks.dart';
 
 @GenerateMocks([
   BackendApi,
+  http.Client,
 ])
 void main() {
   late QvstService service;
@@ -33,6 +36,8 @@ void main() {
       mockBackendApi = MockBackendApi();
       service = QvstService(
         mockBackendApi,
+        "http://localhost/",
+        httpClient: MockClient(),
       );
     },
   );
@@ -672,6 +677,69 @@ void main() {
         });
 
         expect(() => service.importCsv(fileTest.bytes!), throwsException);
+      });
+    });
+
+    group('exportCSVFile', () {
+      late MockClient mockClient;
+      late MockBackendApi mockBackendApi;
+      late QvstService qvstService;
+      const String baseUrl = 'http://localhost:7830/';
+
+      setUp(() {
+        mockClient = MockClient();
+        mockBackendApi = MockBackendApi();
+        qvstService = QvstService(mockBackendApi, baseUrl);
+      });
+
+      test('should download CSV file when response is 200', () async {
+        const campaignId = '123';
+        const token = 'test_token';
+        const csvData = 'id,name\n1,Test';
+        const url =
+            '${baseUrl}xpeho/v1/qvst/campaigns/csv/?campaign_id=$campaignId';
+
+        when(mockClient.get(
+          Uri.parse(url),
+          headers: {'Authorization': 'Bearer $token'},
+        )).thenAnswer((_) async => http.Response(csvData, 200));
+
+        await qvstService.exportCSVFile(campaignId, token);
+      });
+
+      test('should throw an exception when response is 500', () async {
+        const campaignId = '123';
+        const token = 'test_token';
+        const url =
+            '${baseUrl}xpeho/v1/qvst/campaigns/csv/?campaign_id=$campaignId';
+
+        when(mockClient.get(
+          Uri.parse(url),
+          headers: anyNamed('headers'),
+        )).thenAnswer((_) async => http.Response('', 500));
+
+        expect(
+          () async => await qvstService.exportCSVFile(campaignId, token),
+          throwsException,
+        );
+      });
+
+      test('should throw an exception when response is not 200 or 500',
+          () async {
+        const campaignId = '123';
+        const token = 'test_token';
+        const url =
+            '${baseUrl}xpeho/v1/qvst/campaigns/csv/?campaign_id=$campaignId';
+
+        when(mockClient.get(
+          Uri.parse(url),
+          headers: anyNamed('headers'),
+        )).thenAnswer((_) async => http.Response('Unauthorized', 401));
+
+        expect(
+          () async => await qvstService.exportCSVFile(campaignId, token),
+          throwsException,
+        );
       });
     });
 
